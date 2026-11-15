@@ -1,0 +1,35 @@
+name: stats
+
+on:
+  schedule:
+    - cron: "10 20 * * *"   # 毎日 05:10 JST に前日までの成績を取り込む
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "取り込む日数（初回は180）"
+        required: false
+        default: "180"
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y lhasa
+      - run: pip install -r requirements.txt
+      - run: python -m bot.stats --days "${{ inputs.days || '180' }}"
+      - name: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/course12.csv
+          git diff --cached --quiet || git commit -m "update stats $(date -u +%Y-%m-%d)"
+          git push

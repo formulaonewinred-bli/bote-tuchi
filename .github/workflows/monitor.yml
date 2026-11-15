@@ -1,0 +1,42 @@
+name: monitor
+
+on:
+  schedule:
+    # GitHub の cron は UTC。日本時間 = UTC + 9 時間
+    - cron: "20 22 * * *"   # 07:20 JST 時間帯A（朝の一覧通知もここ）
+    - cron: "50 3 * * *"    # 12:50 JST 時間帯B
+    - cron: "20 9 * * *"    # 18:20 JST 時間帯C（ナイター）
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "auto=今の時間帯を監視 / dryrun-today=今日の対象一覧を通知 / test-past=過去日で判定テスト / test-notify=通知テスト"
+        type: choice
+        options: [auto, dryrun-today, test-past, test-notify]
+        default: test-notify
+      date:
+        description: "test-past で使う日付（YYYYMMDD、空なら昨日）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: monitor
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: >
+          python -m bot.monitor
+          --schedule "${{ github.event.schedule }}"
+          --mode "${{ inputs.mode || 'auto' }}"
+          --date "${{ inputs.date }}"
