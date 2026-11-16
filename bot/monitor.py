@@ -1,10 +1,10 @@
 """対象レースを探し、締切前に展示とオッズを確認して通知する。
 
-GitHub Actions から1日3回（時間帯A/B/C）起動され、自分の時間帯にチェック時刻が来るレースだけを担当する。
-  A: 07:00〜13:00  B: 13:00〜18:30  C: 18:30〜24:00（いずれも日本時間、チェック開始時刻で判定）
+GitHub Actions から30分おきに起動される（同時に動くのは1つだけ）。起動すると、その日の未処理のレースを
+締切前チェックの時刻順にすべて処理する。処理済みのレースは state/日付.json に記録して二重通知を防ぐ。
 
 使い方:
-  python -m bot.monitor --schedule "<cron文字列>"     # 定期実行（GitHub Actions）
+  python -m bot.monitor                               # 定期実行（GitHub Actions）
   python -m bot.monitor --mode dryrun-today           # 今日の対象レースを一覧にして通知（チェックはしない）
   python -m bot.monitor --mode test-past --date 20261115  # 過去日で判定を試し、結果を1通にまとめて通知
   python -m bot.monitor --mode test-notify            # 通知が届くかだけ確認
@@ -13,15 +13,16 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
+import os
+import subprocess
 import time
 from dataclasses import dataclass
 
 from . import official
-from .common import JST, VENUES, kyoteibiyori_url, load_config, log, notify, now_jst
+from .common import JST, ROOT, VENUES, kyoteibiyori_url, load_config, log, notify, now_jst
 from .stats import Rates
 
-WINDOWS = {"A": ("07:00", "13:00"), "B": ("13:00", "18:30"), "C": ("18:30", "23:59")}
-SCHEDULE_TO_WINDOW = {"20 22 * * *": "A", "50 3 * * *": "B", "20 9 * * *": "C"}
 
 
 @dataclass
@@ -144,29 +145,75 @@ def title_of(t: Target) -> str:
     return f"🚤 {t.venue} {t.race.rno}R【{t.label()}】締切 {t.race.deadline}"
 
 
-def run_window(window: str, cfg: dict, rates: Rates):
-    hd = now_jst().strftime("%Y%m%d")
-    start, end = (at(hd, x) for x in WINDOWS[window])
-    log(f"時間帯{window} {WINDOWS[window][0]}〜{WINDOWS[window][1]} 開始")
+STATE_DIR = ROOT / "state"
+MAX_RUN = dt.timedelta(hours=5, minutes=30)  # GitHub Actions の1ジョブ上限(6時間)より短く
+
+
+def load_state(hd: str) -> dict:
+    f = STATE_DIR / f"{hd}.json"
+    if f.exists():
+        return json.loads(f.read_text(encoding="utf-8"))
+    return {"summary": False, "done": {}}
+
+
+def save_state(hd: str, state: dict, msg: str):
+    """処理済みレースを記録し、GitHub上に保存する（次の実行と二重にならないように）。"""
+    STATE_DIR.mkdir(exist_ok=True)
+    f = STATE_DIR / f"{hd}.json"
+    f.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    if not os.environ.get("GITHUB_ACTIONS"):
+        return
+    for attempt in range(4):
+        subprocess.run(["git", "add", str(f)], cwd=ROOT)
+        subprocess.run(["git", "commit", "-q", "-m", msg], cwd=ROOT)
+        subprocess.run(["git", "pull", "-q", "--rebase", "-X", "theirs"], cwd=ROOT)
+        if subprocess.run(["git", "push", "-q"], cwd=ROOT).returncode == 0:
+            return
+        time.sleep(3 + attempt * 3)
+    log("状態の保存（push）に失敗しました")
+
+
+def race_key(t: Target) -> str:
+    return f"{t.race.jcd}-{t.race.rno}"
+
+
+def run_auto(cfg: dict, rates: Rates):
+    """その日の残りのレースを、締切前チェックの時刻順にすべて処理する。
+
+    GitHub の定期実行は数時間遅れることがあるため、時間帯で区切らず、
+    起動した時点で未処理のレースを全部担当する。処理済みは state/日付.json に記録。
+    """
+    began = now_jst()
+    hd = began.strftime("%Y%m%d")
+    state = load_state(hd)
     targets, lady_ex = build_targets(hd, cfg, rates)
     log(f"本日のチェック対象 {len(targets)} レース")
     for t in targets:
-        log(f"  {t.race.deadline} {t.venue}{t.race.rno}R {t.label()} 逃げ{t.nige:.1f}% 逃し{t.nigashi:.1f}%")
+        log(f"  {t.race.deadline} {t.venue}{t.race.rno}R {t.label()} 逃げ{t.nige:.1f}% 逃し{t.nigashi:.1f}%"
+            + ("（処理済み）" if race_key(t) in state["done"] else ""))
 
-    if window == "A" and cfg.get("morning_summary", True):
+    if cfg.get("morning_summary", True) and not state.get("summary"):
         send_summary(targets, lady_ex)
+        state["summary"] = True
+        save_state(hd, state, f"state {hd}: summary")
 
     mins = cfg.get("check_minutes_before", 18)
     for t in targets:
+        key = race_key(t)
+        if key in state["done"]:
+            continue
         deadline = at(hd, t.race.deadline)
         check_at = deadline - dt.timedelta(minutes=mins)
-        if not (start <= check_at < end):
-            continue
         now = now_jst()
         if now > deadline - dt.timedelta(minutes=3):
-            log(f"{t.venue}{t.race.rno}R 締切が近すぎるためスキップ")
+            log(f"{t.venue}{t.race.rno}R 締切が過ぎた/近すぎるためスキップ")
+            state["done"][key] = "missed"
+            save_state(hd, state, f"state {hd}: {key} missed")
             continue
         if check_at > now:
+            if check_at - began > MAX_RUN:
+                log("実行時間の上限が近いので、残りは次の実行に任せます")
+                break
             log(f"{t.venue}{t.race.rno}R のチェックまで待機（{check_at:%H:%M}）")
             time.sleep((check_at - now).total_seconds())
         verdict, text = check(t, hd, cfg)
@@ -174,7 +221,9 @@ def run_window(window: str, cfg: dict, rates: Rates):
             notify(title_of(t), text, click=kyoteibiyori_url(t.race.jcd, t.race.rno, hd))
         else:
             log(f"除外 {t.venue}{t.race.rno}R：{text}")
-    log("時間帯の処理が終わりました")
+        state["done"][key] = verdict
+        save_state(hd, state, f"state {hd}: {key} {verdict}")
+    log("処理を終了します")
 
 
 def send_summary(targets: list[Target], lady_ex: list[str], prefix: str = ""):
@@ -230,12 +279,7 @@ def main():
         notify(f"[テスト] {hd} の判定結果 {len(targets)} レース", msg, priority=3)
         return
 
-    window = SCHEDULE_TO_WINDOW.get(a.schedule.strip())
-    if window is None:  # 手動実行：今の時刻が入っている時間帯
-        hhmm = now_jst().strftime("%H:%M")
-        window = next((w for w, (s, e) in WINDOWS.items() if s <= hhmm < e), "A")
-    run_window(window, cfg, rates)
-
+    run_auto(cfg, rates)
 
 if __name__ == "__main__":
     main()

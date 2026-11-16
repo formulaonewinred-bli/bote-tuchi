@@ -2,14 +2,14 @@ name: monitor
 
 on:
   schedule:
-    # GitHub の cron は UTC。日本時間 = UTC + 9 時間
-    - cron: "20 22 * * *"   # 07:20 JST 時間帯A（朝の一覧通知もここ）
-    - cron: "50 3 * * *"    # 12:50 JST 時間帯B
-    - cron: "20 9 * * *"    # 18:20 JST 時間帯C（ナイター）
+    # GitHub の cron は UTC（日本時間 = UTC + 9）。定期実行は遅れることがあるので30分おきに起動し、
+    # 動いている実行があれば次は待機（concurrency）。処理済みレースは state/ に記録して二重通知を防ぐ。
+    - cron: "7,37 22,23 * * *"   # 07:07〜08:37 JST
+    - cron: "7,37 0-11 * * *"    # 09:07〜20:37 JST
   workflow_dispatch:
     inputs:
       mode:
-        description: "auto=今の時間帯を監視 / dryrun-today=今日の対象一覧を通知 / test-past=過去日で判定テスト / test-notify=通知テスト"
+        description: "auto=今日の残りレースを監視 / dryrun-today=今日の対象一覧を通知 / test-past=過去日で判定テスト / test-notify=通知テスト"
         type: choice
         options: [auto, dryrun-today, test-past, test-notify]
         default: test-notify
@@ -19,7 +19,11 @@ on:
         default: ""
 
 permissions:
-  contents: read
+  contents: write   # state/ の処理済み記録を保存するため
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
 
 jobs:
   run:
@@ -34,9 +38,12 @@ jobs:
       - run: pip install -r requirements.txt
       - name: monitor
         env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: >
           python -m bot.monitor
-          --schedule "${{ github.event.schedule }}"
           --mode "${{ inputs.mode || 'auto' }}"
           --date "${{ inputs.date }}"

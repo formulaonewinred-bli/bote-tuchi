@@ -30,3 +30,26 @@ def test_build_and_check(monkeypatch):
     v,txt=monitor.check(t[0],"20261116",CFG,wait=False); assert v=="exclude" and "枠なり" in txt
     monkeypatch.setattr(official,"fetch_races",lambda j,hd:[mk(12,lady=True)])
     t,lady = monitor.build_targets("20261116",CFG,FakeRates()); assert t==[] and lady==["児島12R"]
+
+def test_run_auto_state(monkeypatch, tmp_path):
+    import datetime as dt
+    monkeypatch.setattr(monitor, "STATE_DIR", tmp_path)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    now = dt.datetime(2026,11,16,12,0,tzinfo=monitor.JST)
+    monkeypatch.setattr(monitor, "now_jst", lambda: now)
+    monkeypatch.setattr(monitor.time, "sleep", lambda s: None)
+    r_past = mk(12); r_past.deadline = "11:00"
+    r_soon = mk(11); r_soon.deadline = "12:10"
+    r_done = mk(4);  r_done.deadline = "12:30"
+    T = [monitor.Target(r_past,["12R"],80,40), monitor.Target(r_soon,["準優勝戦"],80,40), monitor.Target(r_done,["企画レース"],80,40)]
+    monkeypatch.setattr(monitor, "build_targets", lambda hd,c,r:(T,[]))
+    sent=[]
+    monkeypatch.setattr(monitor, "notify", lambda title,msg,**k: sent.append(title))
+    monkeypatch.setattr(monitor, "check", lambda t,hd,c,**k:("notify","ok"))
+    monitor.save_state("20261116", {"summary": False, "done": {"16-4":"exclude"}}, "x")
+    monitor.run_auto(dict(CFG, check_minutes_before=18, morning_summary=True), FakeRates())
+    st = monitor.load_state("20261116")
+    assert st["summary"] and st["done"] == {"16-4":"exclude","16-12":"missed","16-11":"notify"}, st
+    assert len(sent) == 2  # 一覧 + 16-11
+    sent.clear(); monitor.run_auto(dict(CFG, check_minutes_before=18, morning_summary=True), FakeRates())
+    assert sent == []  # 2回目は何も送らない
