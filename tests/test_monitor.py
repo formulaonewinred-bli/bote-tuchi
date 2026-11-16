@@ -7,7 +7,7 @@ class FakeRates:
     def nigashi(self, t): return {"2002":(40.0,20)}.get(t,(None,0))
 
 CFG = dict(nige_min=70, nigashi_min=35, min_samples=0, target_race12=True, target_yusho=True, target_junyu=True,
-           exclude_lady_races=True, kikaku={"児島":[4]}, require_wakunari=True, exhibit_retry_times=0,
+           exclude_lady_races=True, exclude_grades=["G1"], kikaku={"児島":[4]}, require_wakunari=True, exhibit_retry_times=0,
            odds_first="1-2-3", odds_second="1-3-2", odds_first_max=10.0, notify_unverified=True)
 
 def mk(rno, t1="1001", lady=False):
@@ -15,7 +15,7 @@ def mk(rno, t1="1001", lady=False):
     return Race("16", rno, f"{8+rno}:00", rs)
 
 def test_build_and_check(monkeypatch):
-    monkeypatch.setattr(official,"fetch_jcds",lambda hd:["16"])
+    monkeypatch.setattr(official,"fetch_jcds",lambda hd:[("16","is-ippan"),("11","is-G1b")])
     monkeypatch.setattr(official,"fetch_races",lambda j,hd:[mk(3),mk(4),mk(10),mk(11),mk(12),mk(12,"1003")])
     monkeypatch.setattr(official,"fetch_race_type",lambda j,r,hd:{10:"予選",11:"準優勝戦",12:"優勝戦"}.get(r,"予選"))
     t,lady = monitor.build_targets("20261116",CFG,FakeRates())

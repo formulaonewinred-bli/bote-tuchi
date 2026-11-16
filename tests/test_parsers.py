@@ -50,8 +50,9 @@ def test_raceindex_and_type():
     assert races[0].rno == 12 and races[0].deadline == "16:21" and len(races[0].racers) == 6
     assert races[0].racers[0].toban == "4019" and races[0].racers[1].lady and races[0].racers[0].name == "山田太郎1"
     assert official.parse_race_type('<h3 class="title16_titleDetail__add2020">\n\t\t準優勝戦　　　\n\t\t1800m\n\t</h3>') == "準優勝戦"
-    idx = '<a href="/owpc/pc/race/raceindex?jcd=02&amp;hd=20261115">a</a><a href="/owpc/pc/race/raceindex?jcd=16&amp;hd=20261115">b</a>'
-    assert official.parse_index(idx) == ["02","16"]
+    idx = ('<table><tr><td>x</td><td class="is-ippan "></td><td><a href="/owpc/pc/race/raceindex?jcd=02&amp;hd=20261115">a</a></td></tr>'
+           '<tr><td>x</td><td class="is-G1b "></td><td><a href="/owpc/pc/race/raceindex?jcd=11&amp;hd=20261115">b</a></td></tr></table>')
+    assert official.parse_index(idx) == [("02","is-ippan"),("11","is-G1b")]
 
 K = """STARTK
 24KBGN

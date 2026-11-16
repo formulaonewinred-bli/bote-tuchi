@@ -30,15 +30,30 @@ class Race:
 
 # ---------- 解析（HTML文字列 → データ）----------
 
-def parse_index(html: str) -> list[str]:
-    """本日のレース一覧 → 開催中の場コード一覧。"""
+def parse_index(html: str) -> list[tuple[str, str]]:
+    """本日のレース一覧 → [(場コード, グレード表示のclass名), ...]。
+
+    グレードは開催一覧の行にあるセルの class（例: is-ippan, is-G1b など）で表される。
+    """
     soup = BeautifulSoup(html, "html.parser")
-    jcds = []
+    out: list[tuple[str, str]] = []
+    seen = set()
     for a in soup.select('a[href*="raceindex?jcd="]'):
         m = re.search(r"jcd=(\d{2})", a["href"])
-        if m and m.group(1) not in jcds:
-            jcds.append(m.group(1))
-    return jcds
+        if not m or m.group(1) in seen:
+            continue
+        seen.add(m.group(1))
+        grade = ""
+        tr = a.find_parent("tr")
+        if tr:
+            for td in tr.find_all("td"):
+                cls = " ".join(td.get("class") or [])
+                g = re.search(r"\bis-(ippan|SG\w*|PG1\w*|G[123]\w*)", cls, re.I)
+                if g:
+                    grade = g.group(0)
+                    break
+        out.append((m.group(1), grade))
+    return out
 
 
 def parse_raceindex(html: str, jcd: str) -> list[Race]:
@@ -138,7 +153,7 @@ def _put(odds, first, second, third, val):
 
 # ---------- 取得（URL → データ）----------
 
-def fetch_jcds(hd: str) -> list[str]:
+def fetch_jcds(hd: str) -> list[tuple[str, str]]:
     html = http_get(f"{BASE}/index?hd={hd}")
     return parse_index(html) if html else []
 

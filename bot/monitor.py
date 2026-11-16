@@ -51,8 +51,13 @@ def at(hd: str, hhmm: str) -> dt.datetime:
 def build_targets(hd: str, cfg: dict, rates: Rates):
     targets: list[Target] = []
     lady_excluded: list[str] = []
-    for jcd in official.fetch_jcds(hd):
+    excl = [g.upper() for g in cfg.get("exclude_grades", [])]
+    for jcd, grade in official.fetch_jcds(hd):
         venue = VENUES.get(jcd, jcd)
+        log(f"{venue}: グレード表示 {grade or '不明'}")
+        if grade and any(g in grade.upper() for g in excl):
+            log(f"{venue}: 除外グレードのため対象外")
+            continue
         kikaku = set(cfg.get("kikaku", {}).get(venue) or [])
         for race in official.fetch_races(jcd, hd):
             if len(race.racers) < 2:
@@ -255,6 +260,10 @@ def main():
     if rates.count == 0:
         notify("⚠ボートレース通知：統計データがありません",
                "GitHub の Actions で「stats」を手動実行して、逃げ率・逃し率のデータを作ってください。")
+        return
+
+    if a.mode == "list":  # 今日の対象をログに出すだけ（通知しない）
+        build_targets(now_jst().strftime("%Y%m%d"), cfg, rates)
         return
 
     if a.mode == "dryrun-today":

@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "auto=今日の残りレースを監視 / dryrun-today=今日の対象一覧を通知 / test-past=過去日で判定テスト / test-notify=通知テスト"
+        description: "auto=今日の残りレースを監視 / list=今日の対象をログに出すだけ / dryrun-today=今日の対象一覧を通知 / test-past=過去日で判定テスト / test-notify=通知テスト"
         type: choice
-        options: [auto, dryrun-today, test-past, test-notify]
+        options: [auto, list, dryrun-today, test-past, test-notify]
         default: test-notify
       date:
         description: "test-past で使う日付（YYYYMMDD、空なら昨日）"
