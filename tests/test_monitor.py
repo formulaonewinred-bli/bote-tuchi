@@ -18,6 +18,11 @@ def test_build_and_check(monkeypatch):
     monkeypatch.setattr(official,"fetch_jcds",lambda hd:[("16","is-ippan"),("11","is-G1b")])
     monkeypatch.setattr(official,"fetch_races",lambda j,hd:[mk(3),mk(4),mk(10),mk(11),mk(12),mk(12,"1003")])
     monkeypatch.setattr(official,"fetch_race_type",lambda j,r,hd:{10:"予選",11:"準優勝戦",12:"優勝戦"}.get(r,"予選"))
+    cfg2 = dict(CFG, target_race12=False, junyu_12r_only=True)
+    monkeypatch.setattr(official,"fetch_race_type",lambda j,r,hd:{10:"予選",11:"準優勝戦",12:"準優勝戦"}.get(r,"予選"))
+    t2,_ = monitor.build_targets("20261116",cfg2,FakeRates())
+    assert [(x.race.rno,x.kinds) for x in t2]==[(4,["企画レース"]),(12,["準優勝戦"])], [(x.race.rno,x.kinds) for x in t2]
+    monkeypatch.setattr(official,"fetch_race_type",lambda j,r,hd:{10:"予選",11:"準優勝戦",12:"優勝戦"}.get(r,"予選"))
     t,lady = monitor.build_targets("20261116",CFG,FakeRates())
     got=[(x.race.rno,x.kinds) for x in t]
     assert got==[(4,["企画レース"]),(11,["準優勝戦"]),(12,["12R","優勝戦"])], got

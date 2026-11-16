@@ -8,9 +8,10 @@ min_samples: 0      # 逃げ率/逃し率の母数（1コース・2コース進�
 stats_days: 180     # 逃げ率・逃し率を集計する期間（日）
 
 # --- 対象レースの種類（どれか1つに当たれば対象）---
-target_race12: true     # 12R
+target_race12: false    # 12R（種別を問わず）
 target_yusho: true      # 優勝戦
 target_junyu: true      # 準優勝戦
+junyu_12r_only: true    # 準優勝戦は12Rのものだけ対象
 exclude_lady_races: true  # 女子戦（出走6人全員が女子）のレースは除外
 exclude_grades: ["G1"]    # このグレードの開催は除外（PG1も含む）。SGも外すなら ["G1", "SG"]
 

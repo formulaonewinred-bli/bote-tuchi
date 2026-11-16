@@ -78,7 +78,7 @@ def build_targets(hd: str, cfg: dict, rates: Rates):
             kinds = []
             if cfg.get("target_race12", True) and is12:
                 kinds.append("12R")
-            if cfg.get("target_junyu", True) and "準優" in rt:
+            if cfg.get("target_junyu", True) and "準優" in rt and (is12 or not cfg.get("junyu_12r_only", False)):
                 kinds.append("準優勝戦")
             elif cfg.get("target_yusho", True) and "優勝戦" in rt:
                 kinds.append("優勝戦")
