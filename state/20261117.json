@@ -1,4 +1,6 @@
 {
  "summary": true,
- "done": {}
+ "done": {
+  "08-12": "notify"
+ }
 }
