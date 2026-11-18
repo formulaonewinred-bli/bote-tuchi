@@ -125,10 +125,18 @@ def check(t: Target, hd: str, cfg: dict, *, wait: bool = True) -> tuple[str, str
     if len(ranked) >= 2:
         (k1, v1), (k2, v2) = ranked[0], ranked[1]
         lines.append(f"3連単 1番人気 {k1} {v1:.1f}倍／2番人気 {k2} {v2:.1f}倍")
-        if k1 != cfg["odds_first"]:
-            reasons.append(f"1番人気が{k1}")
-        if k2 != cfg["odds_second"]:
-            reasons.append(f"2番人気が{k2}")
+        allowed = cfg.get("odds_top2_allowed")
+        if allowed:
+            # 1番人気・2番人気がどちらも指定の組番のどれかであること
+            if k1 not in allowed:
+                reasons.append(f"1番人気が{k1}")
+            if k2 not in allowed:
+                reasons.append(f"2番人気が{k2}")
+        else:
+            if k1 != cfg["odds_first"]:
+                reasons.append(f"1番人気が{k1}")
+            if k2 != cfg["odds_second"]:
+                reasons.append(f"2番人気が{k2}")
         if v1 >= cfg["odds_first_max"]:
             reasons.append(f"1番人気{v1:.1f}倍")
     else:

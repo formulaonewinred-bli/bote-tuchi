@@ -48,8 +48,11 @@ check_minutes_before: 18   # 締切の何分前にチェックを始めるか（
 require_wakunari: true     # スタート展示が枠なり（1-2-3-4-5-6）でなければ除外
 exhibit_retry_times: 2     # 展示がまだ出ていない時の再確認回数
 exhibit_retry_interval_sec: 120
-odds_first: "1-2-3"        # 3連単1番人気がこれでなければ除外
-odds_second: "1-3-2"       # 3連単2番人気がこれでなければ除外
+# 3連単の1番人気と2番人気が、どちらもこの中の組番でなければ除外
+odds_top2_allowed: ["1-2-3", "1-3-2", "1-2-4"]
+# （odds_top2_allowed を空 [] にすると、下の「1番人気＝odds_first・2番人気＝odds_second」の判定になります）
+odds_first: "1-2-3"
+odds_second: "1-3-2"
 odds_first_max: 10.0       # 1番人気のオッズがこの値以上なら除外（= 1桁台のみ通知）
 notify_unverified: true    # 展示/オッズが読めなかった時も「⚠未確認」付きで通知する
 

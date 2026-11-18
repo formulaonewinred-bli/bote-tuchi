@@ -29,6 +29,11 @@ def test_build_and_check(monkeypatch):
     monkeypatch.setattr(official,"fetch_exhibition_order",lambda j,r,hd:[1,2,3,4,5,6])
     monkeypatch.setattr(official,"fetch_odds3t",lambda j,r,hd:{"1-2-3":4.5,"1-3-2":6.0,"1-2-4":9.0})
     v,txt=monitor.check(t[0],"20261116",CFG,wait=False); assert v=="notify", txt
+    c3 = dict(CFG, odds_top2_allowed=["1-2-3","1-3-2","1-2-4"])
+    monkeypatch.setattr(official,"fetch_odds3t",lambda j,r,hd:{"1-2-4":4.0,"1-3-2":6.0,"1-2-3":7.0})
+    v,txt=monitor.check(t[0],"20261116",c3,wait=False); assert v=="notify", txt
+    monkeypatch.setattr(official,"fetch_odds3t",lambda j,r,hd:{"1-2-3":4.0,"1-3-4":6.0,"1-2-4":7.0})
+    v,txt=monitor.check(t[0],"20261116",c3,wait=False); assert v=="exclude" and "2番人気が1-3-4" in txt
     monkeypatch.setattr(official,"fetch_odds3t",lambda j,r,hd:{"1-2-3":11.0,"1-3-2":12.0})
     v,txt=monitor.check(t[0],"20261116",CFG,wait=False); assert v=="exclude" and "11.0" in txt
     monkeypatch.setattr(official,"fetch_exhibition_order",lambda j,r,hd:[1,2,6,3,4,5])
