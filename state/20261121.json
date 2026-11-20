@@ -1,6 +1,7 @@
 {
  "summary": true,
  "done": {
-  "14-1": "notify"
+  "14-1": "notify",
+  "10-1": "exclude"
  }
 }
