@@ -31,6 +31,7 @@ class Target:
     kinds: list[str]
     nige: float
     nigashi: float
+    info: dict | None = None
 
     @property
     def venue(self) -> str:
@@ -143,6 +144,13 @@ def check(t: Target, hd: str, cfg: dict, *, wait: bool = True) -> tuple[str, str
         unverified.append("オッズ")
         lines.append("3連単オッズ：⚠未確認")
 
+    t.info = {
+        "exhibition": "".join(map(str, order)),
+        "top1": ranked[0][0] if len(ranked) > 0 else "", "top1_odds": ranked[0][1] if len(ranked) > 0 else "",
+        "top2": ranked[1][0] if len(ranked) > 1 else "", "top2_odds": ranked[1][1] if len(ranked) > 1 else "",
+        "odds_123": odds.get("1-2-3", ""), "odds_132": odds.get("1-3-2", ""), "odds_124": odds.get("1-2-4", ""),
+        "reason": "、".join(reasons) or ("未確認（" + "・".join(unverified) + "）" if unverified else ""),
+    }
     if reasons:
         return "exclude", "、".join(reasons)
     if unverified and not cfg.get("notify_unverified", True):
@@ -178,13 +186,34 @@ def save_state(hd: str, state: dict, msg: str):
     if not os.environ.get("GITHUB_ACTIONS"):
         return
     for attempt in range(4):
-        subprocess.run(["git", "add", str(f)], cwd=ROOT)
+        subprocess.run(["git", "add", str(f)] + ([str(CHECKS)] if CHECKS.exists() else []), cwd=ROOT)
         subprocess.run(["git", "commit", "-q", "-m", msg], cwd=ROOT)
         subprocess.run(["git", "pull", "-q", "--rebase", "-X", "theirs"], cwd=ROOT)
         if subprocess.run(["git", "push", "-q"], cwd=ROOT).returncode == 0:
             return
         time.sleep(3 + attempt * 3)
     log("状態の保存（push）に失敗しました")
+
+
+CHECKS = ROOT / "data" / "checks.csv"
+CHECK_FIELDS = ["date", "jcd", "venue", "rno", "deadline", "kinds", "race_type", "nige", "nigashi", "exhibition",
+                "top1", "top1_odds", "top2", "top2_odds", "odds_123", "odds_132", "odds_124", "verdict", "reason"]
+
+
+def record_check(hd: str, t: Target, verdict: str):
+    """チェックした結果を data/checks.csv に1行追記する（的中まとめ用）。"""
+    import csv
+    new = not CHECKS.exists()
+    CHECKS.parent.mkdir(exist_ok=True)
+    info = t.info or {}
+    row = {"date": hd, "jcd": t.race.jcd, "venue": t.venue, "rno": t.race.rno, "deadline": t.race.deadline,
+           "kinds": "・".join(t.kinds), "race_type": t.race.race_type, "nige": f"{t.nige:.1f}",
+           "nigashi": f"{t.nigashi:.1f}", "verdict": verdict, **info}
+    with open(CHECKS, "a", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CHECK_FIELDS, extrasaction="ignore")
+        if new:
+            w.writeheader()
+        w.writerow(row)
 
 
 def race_key(t: Target) -> str:
@@ -236,6 +265,7 @@ def run_auto(cfg: dict, rates: Rates):
         else:
             log(f"除外 {t.venue}{t.race.rno}R：{text}")
         state["done"][key] = verdict
+        record_check(hd, t, verdict)
         save_state(hd, state, f"state {hd}: {key} {verdict}")
     log("処理を終了します")
 

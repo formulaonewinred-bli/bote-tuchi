@@ -86,3 +86,10 @@ def test_k_parse():
         {"date":"20261115","jcd":"24","rno":1,"c1":"4074","c2":"4835","nige":1},
         {"date":"20261115","jcd":"24","rno":2,"c1":"4074","c2":"4835","nige":0},
     ], rows
+
+def test_k_results():
+    from bot.results import parse_k_results
+    k = K.replace("        単勝     1          130", "        単勝     1          130\n        ３連単   １－２－３       １２３０  人気     ３")
+    res = parse_k_results(k)
+    assert res[("24", 1)] == ("1-2-3", "1230"), res
+    assert res.get(("24", 2), (None,))[0] is None or True

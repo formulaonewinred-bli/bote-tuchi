@@ -44,6 +44,7 @@ def test_build_and_check(monkeypatch):
 def test_run_auto_state(monkeypatch, tmp_path):
     import datetime as dt
     monkeypatch.setattr(monitor, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(monitor, "CHECKS", tmp_path / "checks.csv")
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     now = dt.datetime(2026,11,16,12,0,tzinfo=monitor.JST)
     monkeypatch.setattr(monitor, "now_jst", lambda: now)
