@@ -3,6 +3,7 @@
  "done": {
   "14-1": "notify",
   "10-1": "exclude",
-  "14-3": "exclude"
+  "14-3": "exclude",
+  "17-12": "notify"
  }
 }
