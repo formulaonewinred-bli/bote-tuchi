@@ -5,6 +5,7 @@
   "10-1": "exclude",
   "14-3": "exclude",
   "17-12": "notify",
-  "07-7": "exclude"
+  "07-7": "exclude",
+  "01-7": "exclude"
  }
 }
