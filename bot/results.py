@@ -99,6 +99,52 @@ def backfill_checks_from_state():
         log(f"state から {added} 件を補完")
 
 
+def enrich_backfilled():
+    """記録開始前の行に、公式サイトの過去ページから項目を補う（オッズは締切時のもの）。"""
+    from . import official
+    from .stats import Rates
+    cfg = load_config()
+    checks = _read(CHECKS)
+    todo = [r for r in checks if r.get("reason") == "（記録開始前）"]
+    if not todo:
+        return
+    rates = Rates(cfg.get("stats_days", 180))
+    races_cache: dict = {}
+    for r in todo:
+        hd, jcd, rno = r["date"], r["jcd"], int(r["rno"])
+        if (hd, jcd) not in races_cache:
+            races_cache[(hd, jcd)] = {x.rno: x for x in official.fetch_races(jcd, hd)}
+        race = races_cache[(hd, jcd)].get(rno)
+        if race and len(race.racers) >= 2:
+            r["deadline"] = race.deadline
+            n1, _ = rates.nige(race.racers[0].toban)
+            n2, _ = rates.nigashi(race.racers[1].toban)
+            r["nige"] = f"{n1:.1f}" if n1 is not None else ""
+            r["nigashi"] = f"{n2:.1f}" if n2 is not None else ""
+        rt = official.fetch_race_type(jcd, rno, hd)
+        r["race_type"] = rt
+        kinds = []
+        if "準優" in rt:
+            kinds.append("準優勝戦")
+        elif "優勝戦" in rt:
+            kinds.append("優勝戦")
+        if rno in set(cfg.get("kikaku", {}).get(r["venue"]) or []):
+            kinds.append("企画レース")
+        if rno == 12 and not kinds:
+            kinds.append("12R")
+        r["kinds"] = "・".join(kinds)
+        r["exhibition"] = "".join(map(str, official.fetch_exhibition_order(jcd, rno, hd)))
+        odds = official.fetch_odds3t(jcd, rno, hd)
+        ranked = sorted(odds.items(), key=lambda kv: kv[1])
+        if len(ranked) >= 2:
+            r["top1"], r["top1_odds"] = ranked[0]
+            r["top2"], r["top2_odds"] = ranked[1]
+        r["odds_123"], r["odds_132"], r["odds_124"] = (odds.get(k, "") for k in ("1-2-3", "1-3-2", "1-2-4"))
+        r["reason"] = "（記録開始前・締切時オッズで補完）"
+        log(f"補完 {hd} {r['venue']}{rno}R {r['kinds']} 1番人気 {r.get('top1')}")
+    _write(CHECKS, CHECK_FIELDS, checks)
+
+
 def fill_results():
     checks = _read(CHECKS)
     results = _read(RESULTS)
@@ -172,6 +218,8 @@ def make_report():
 
     def reason_group(r):
         t = r.get("reason", "")
+        if "記録開始前" in t:
+            return "記録開始前（理由不明）"
         if "枠なり" in t:
             return "展示が枠なりでない"
         if "人気" in t and "倍" not in t:
@@ -183,12 +231,52 @@ def make_report():
     by_reason = defaultdict(list)
     for r in excluded:
         by_reason[reason_group(r)].append(r)
-    by_kind = defaultdict(list)
-    for r in notified:
-        by_kind[r.get("kinds") or "不明"].append(r)
-    by_venue = defaultdict(list)
-    for r in notified:
-        by_venue[r["venue"]].append(r)
+    def band(v, edges, unit="%"):
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            return "不明"
+        lo = None
+        for e in edges:
+            if x < e:
+                return f"{lo:g}〜{e:g}{unit}未満" if lo is not None else f"{e:g}{unit}未満"
+            lo = e
+        return f"{lo:g}{unit}以上"
+
+    def combo(v):
+        return v if v in bets else ("その他" if v else "不明")
+
+    def exhibition(r):
+        e = r.get("exhibition") or ""
+        return "枠なり" if e == "123456" else ("枠なりでない" if e else "不明")
+
+    breakdowns = [
+        ("1号艇の逃げ率", lambda r: band(r.get("nige"), [70, 75, 80, 85])),
+        ("2号艇の逃し率", lambda r: band(r.get("nigashi"), [35, 40, 45, 50, 55])),
+        ("3連単1番人気の組番", lambda r: combo(r.get("top1"))),
+        ("3連単2番人気の組番", lambda r: combo(r.get("top2"))),
+        ("3連単1番人気のオッズ", lambda r: band(r.get("top1_odds"), [3, 5, 7, 10], "倍")),
+        ("展示の進入", exhibition),
+        ("レースの種類", lambda r: r.get("kinds") or "不明"),
+        ("場", lambda r: r.get("venue") or "不明"),
+    ]
+
+    def breakdown_table(title, keyfn, rs):
+        groups = defaultdict(list)
+        for r in rs:
+            groups[keyfn(r)].append(r)
+        out = [f"#### {title}", "",
+               "| 区分 | レース数 | うち通知 | 的中 | 的中率 | 1号艇1着 | 回収率 |",
+               "|---|---|---|---|---|---|---|"]
+        def order(k):
+            return (k in ("不明", "その他"), k)
+        for name in sorted(groups, key=order):
+            g = groups[name]
+            st = _stats(g, bets)
+            roi = _pct(st["ret"], st["cost"]) + ("" if st["pay_known"] else "※")
+            out.append(f"| {name} | {st['n']} | {sum(1 for r in g if r['verdict'] == 'notify')} | {st['hit']} | "
+                       f"{_pct(st['hit'], st['n'])} | {_pct(st['in1'], st['n'])} | {roi} |")
+        return out + [""]
 
     lines = [
         "# 通知レースの的中まとめ", "",
@@ -199,10 +287,11 @@ def make_report():
     ]
     lines += table("通知したレース vs 除外したレース", [("通知した", notified), ("除外した（合計）", excluded)])
     lines += table("除外理由ごと（もし買っていたら）", sorted(by_reason.items()))
-    if by_kind:
-        lines += table("通知したレース：種類ごと", sorted(by_kind.items()))
-    if by_venue:
-        lines += table("通知したレース：場ごと", sorted(by_venue.items()))
+    lines += ["### 条件ごとの内訳（チェックした全レース。もし全部買っていたら）", "",
+              "通知したレースだけでなく、除外したレースも含めた成績です。区分ごとの的中率・回収率を見ると、"
+              "条件をどこまで厳しく／ゆるくするとよいかの目安になります。11/20以前のレースは記録開始前のため、オッズは締切時のもので補っています。", ""]
+    for title, fn in breakdowns:
+        lines += breakdown_table(title, fn, new_rule)
     lines += ["※ 払戻金が取れなかったレースを含むため、回収率は参考値", "",
               "### 直近の通知・判定（新しい順）", "",
               "| 日付 | 場 | R | 種類 | 判定 | 1番人気 | 2番人気 | 結果 | 払戻 | 的中 |",
@@ -221,6 +310,7 @@ def make_report():
 
 def main():
     backfill_checks_from_state()
+    enrich_backfilled()
     fill_results()
     make_report()
 
