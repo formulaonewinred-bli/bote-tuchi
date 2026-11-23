@@ -2,6 +2,7 @@
  "summary": true,
  "done": {
   "21-4": "exclude",
-  "09-1": "notify"
+  "09-1": "notify",
+  "22-3": "exclude"
  }
 }
