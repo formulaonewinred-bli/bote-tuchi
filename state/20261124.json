@@ -10,6 +10,7 @@
   "13-12": "notify",
   "22-12": "exclude",
   "15-7": "notify",
-  "15-8": "missed"
+  "15-8": "missed",
+  "07-12": "notify"
  }
 }
