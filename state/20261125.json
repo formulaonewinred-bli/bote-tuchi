@@ -4,6 +4,7 @@
   "21-4": "exclude",
   "13-12": "notify",
   "24-7": "notify",
-  "15-8": "exclude"
+  "15-8": "exclude",
+  "24-12": "notify"
  }
 }
