@@ -3,6 +3,7 @@
  "done": {
   "23-3": "exclude",
   "18-4": "exclude",
-  "17-1": "exclude"
+  "17-1": "exclude",
+  "08-6": "notify"
  }
 }
