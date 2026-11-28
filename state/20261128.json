@@ -6,6 +6,7 @@
   "17-1": "exclude",
   "08-6": "notify",
   "13-6": "exclude",
-  "18-12": "missed"
+  "18-12": "missed",
+  "02-7": "exclude"
  }
 }
