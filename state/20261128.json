@@ -4,6 +4,7 @@
   "23-3": "exclude",
   "18-4": "exclude",
   "17-1": "exclude",
-  "08-6": "notify"
+  "08-6": "notify",
+  "13-6": "exclude"
  }
 }
